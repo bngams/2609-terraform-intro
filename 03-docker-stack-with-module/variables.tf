@@ -1,23 +1,27 @@
-variable "SERVER_NAME" {
-    description = "The server name for the WordPress site"
-    type = string
-    default = "localhost"
 
-    # snake case, slug format
-    validation {
-        condition     = length(var.SERVER_NAME) > 0 && can(regex("^[a-z0-9_]+$", var.SERVER_NAME))
-        error_message = "The server name must not be empty and must be in snake case (lowercase letters, numbers, and underscores only)"
-    }
-}
+# Variables for the module
+# We need to redeclare them 
+# if we want to populate them 
+# in the global project (with *.auto.tfvars for instance)
+# variable "SERVER_NAME" {}
+# variable "WP_PORT" {}
+# variable "WP_VARS" {}
 
-variable "WP_VARS" {
-    description = "All WordPress variables"
-    type = map(string)
-    default = {
-        MYSQL_ROOT_PWD = "MySQLRootPassword"
-        MYSQL_DB_NAME = "wordpress"
-        MYSQL_USER = "wp_user"
-        MYSQL_USER_PWD = "wp_password"
+# An idea is to use a global config map
+# to avoid redeclaring each variable individually
+# and avoid variables duplication ()
+variable "GLOBAL_CONFIG" {
+  description = "Global configuration for the Docker stack"
+  type        = map(string)
+  default     = {
+    ENVIRONMENT = "development"
+    SERVER_NAME = "localhost"
+    WP_PORT     = 8888
+    WP_VARS = {
+      MYSQL_ROOT_PWD = "MySQLRootPassword"
+      MYSQL_DB_NAME  = "wordpress"
+      MYSQL_USER     = "wp_user"
+      MYSQL_USER_PWD = "wp_password"
     }
-    sensitive = true
-}
+  }
+} 
