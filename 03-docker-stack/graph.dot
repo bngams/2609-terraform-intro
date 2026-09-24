@@ -1,0 +1,47 @@
+digraph {
+	compound = "true"
+	newrank = "true"
+	subgraph "root" {
+		"[root] docker_container.mysql (expand)" [label = "docker_container.mysql", shape = "box"]
+		"[root] docker_container.wordpress (expand)" [label = "docker_container.wordpress", shape = "box"]
+		"[root] docker_image.mysql (expand)" [label = "docker_image.mysql", shape = "box"]
+		"[root] docker_image.wordpress (expand)" [label = "docker_image.wordpress", shape = "box"]
+		"[root] docker_network.wp_net (expand)" [label = "docker_network.wp_net", shape = "box"]
+		"[root] docker_volume.mysql_data (expand)" [label = "docker_volume.mysql_data", shape = "box"]
+		"[root] docker_volume.wordpress_data (expand)" [label = "docker_volume.wordpress_data", shape = "box"]
+		"[root] provider[\"registry.opentofu.org/kreuzwerker/docker\"]" [label = "provider[\"registry.opentofu.org/kreuzwerker/docker\"]", shape = "diamond"]
+		"[root] var.MYSQL_DB_NAME" [label = "var.MYSQL_DB_NAME", shape = "note"]
+		"[root] var.MYSQL_ROOT_PWD" [label = "var.MYSQL_ROOT_PWD", shape = "note"]
+		"[root] var.MYSQL_USER" [label = "var.MYSQL_USER", shape = "note"]
+		"[root] var.MYSQL_USER_PWD" [label = "var.MYSQL_USER_PWD", shape = "note"]
+		"[root] var.WP_VARS" [label = "var.WP_VARS", shape = "note"]
+		"[root] docker_container.mysql (expand)" -> "[root] docker_image.mysql (expand)"
+		"[root] docker_container.mysql (expand)" -> "[root] docker_network.wp_net (expand)"
+		"[root] docker_container.mysql (expand)" -> "[root] docker_volume.mysql_data (expand)"
+		"[root] docker_container.mysql (expand)" -> "[root] var.MYSQL_DB_NAME (expand, reference)"
+		"[root] docker_container.mysql (expand)" -> "[root] var.MYSQL_ROOT_PWD (expand, reference)"
+		"[root] docker_container.mysql (expand)" -> "[root] var.MYSQL_USER (expand, reference)"
+		"[root] docker_container.mysql (expand)" -> "[root] var.MYSQL_USER_PWD (expand, reference)"
+		"[root] docker_container.wordpress (expand)" -> "[root] docker_container.mysql (expand)"
+		"[root] docker_container.wordpress (expand)" -> "[root] docker_image.wordpress (expand)"
+		"[root] docker_container.wordpress (expand)" -> "[root] docker_volume.wordpress_data (expand)"
+		"[root] docker_image.mysql (expand)" -> "[root] provider[\"registry.opentofu.org/kreuzwerker/docker\"]"
+		"[root] docker_image.wordpress (expand)" -> "[root] provider[\"registry.opentofu.org/kreuzwerker/docker\"]"
+		"[root] docker_network.wp_net (expand)" -> "[root] provider[\"registry.opentofu.org/kreuzwerker/docker\"]"
+		"[root] docker_volume.mysql_data (expand)" -> "[root] provider[\"registry.opentofu.org/kreuzwerker/docker\"]"
+		"[root] docker_volume.wordpress_data (expand)" -> "[root] provider[\"registry.opentofu.org/kreuzwerker/docker\"]"
+		"[root] output.container_mysql_id (expand)" -> "[root] docker_container.mysql (expand)"
+		"[root] output.container_wordpress_id (expand)" -> "[root] docker_container.wordpress (expand)"
+		"[root] provider[\"registry.opentofu.org/kreuzwerker/docker\"] (close)" -> "[root] docker_container.wordpress (expand)"
+		"[root] root" -> "[root] output.container_mysql_id (expand)"
+		"[root] root" -> "[root] output.container_wordpress_id (expand)"
+		"[root] root" -> "[root] provider[\"registry.opentofu.org/kreuzwerker/docker\"] (close)"
+		"[root] root" -> "[root] var.WP_VARS (expand, reference)"
+		"[root] var.MYSQL_DB_NAME (expand, reference)" -> "[root] var.MYSQL_DB_NAME"
+		"[root] var.MYSQL_ROOT_PWD (expand, reference)" -> "[root] var.MYSQL_ROOT_PWD"
+		"[root] var.MYSQL_USER (expand, reference)" -> "[root] var.MYSQL_USER"
+		"[root] var.MYSQL_USER_PWD (expand, reference)" -> "[root] var.MYSQL_USER_PWD"
+		"[root] var.WP_VARS (expand, reference)" -> "[root] var.WP_VARS"
+	}
+}
+
