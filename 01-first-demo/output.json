@@ -1,0 +1,12 @@
+{
+  "my_first_tf_file_checksum": {
+    "sensitive": false,
+    "type": "string",
+    "value": "0f69ccc6c65fc5d2e01d1bd38cfab52f"
+  },
+  "my_first_tf_file_path": {
+    "sensitive": false,
+    "type": "string",
+    "value": "./output/my_first_tf_file.txt"
+  }
+}
