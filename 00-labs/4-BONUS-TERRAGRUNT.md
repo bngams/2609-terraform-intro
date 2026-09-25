@@ -86,15 +86,16 @@ j2-4-bonus-terragrunt/
 
 ## 🤔 1 — Le problème : la duplication entre environnements
 
-En Terraform pur, pour avoir un `dev` **et** un `staging`, deux options, toutes deux frustrantes :
+En Terraform pur, pour gérer un `dev` **et** un `staging`, on a trois approches — les deux premières
+franchement frustrantes, la troisième moins, mais tout aussi piégeuse :
 
-| Approche | Ce qu'on recopie | Le risque |
+| Approche | L'idée | Le risque |
 |---|---|---|
-| Un dossier par env, chacun son `main.tf` + ses `*.tfvars` | **toute** la config à chaque env | un `tfvars` modifié à moitié, des identifiants qui divergent |
-| Un seul projet + `terraform workspace` | moins de fichiers, mais… | le **backend** (chemin du state) **ne peut pas** dépendre d'une variable |
+| **Un dossier par env** (`main.tf` + `*.tfvars` dupliqués) | isolation totale | on **recopie toute la config** => dérive, `tfvars` modifié à moitié |
+| **Variabiliser le backend** (`path = "state/${var.env}/…"`) | garder un seul code | **impossible** : le bloc `backend` refuse toute variable (voir ci-dessous) |
+| **Les workspaces** (`terraform workspace`) | une seule config, N states | rien dans le code ne dit *quel* env : il faut **penser à switcher** avant chaque `apply` |
 
-Le cœur du souci : **les mêmes valeurs sont écrites plusieurs fois** (les identifiants MySQL, la
-version des images…), et **le bloc `backend` de Terraform refuse toute variable** :
+Le bloc `backend` refuse littéralement toute valeur nommée :
 
 ```hcl
 terraform {
@@ -105,8 +106,24 @@ terraform {
 # Error: Variables not allowed — a backend block cannot refer to named values.
 ```
 
-> C'est **exactement** le problème que Terragrunt résout : écrire la config **une fois**, et laisser
-> le wrapper la décliner par environnement — **y compris le backend**.
+> ⚠️ **Les workspaces : un peu moins frustrants (DRY), mais tout aussi dangereux.** Le workspace
+> courant est un état **invisible** de votre shell — rien dans les fichiers ne rappelle que vous êtes
+> sur `dev` ou `prod`. Un `apply` lancé dans le mauvais workspace, et vous écrasez le mauvais
+> environnement. On en est réduit à des garde-fous **externes**, par ex. un hook git `post-checkout`
+> qui bascule le workspace selon la branche :
+>
+> ```bash
+> # .git/hooks/post-checkout — switch de branche => switch de workspace
+> branch=$(git rev-parse --abbrev-ref HEAD)
+> terraform workspace select "$branch" 2>/dev/null || terraform workspace new "$branch"
+> ```
+>
+> …mais un garde-fou qu'on doit penser à installer reste fragile. Le bonus
+> [4-BONUS — Workspaces](4-BONUS-STATE-WORKSPACES.md) détaille cette approche.
+
+> C'est **exactement** ce que Terragrunt résout : écrire la config **une fois**, la décliner par
+> environnement — **backend compris** — et rendre l'environnement **explicite** (un dossier = un env),
+> sans dépendre d'un workspace qu'on peut oublier.
 
 ---
 
