@@ -1,0 +1,442 @@
+<title>Pipeline CI/CD × Terraform : environnements à la demande</title>
+<style>
+  :root {
+    --navy1:#0b2440; --navy2:#173f68;
+    --page:#e9eef4; --surface:#ffffff;
+    --ink:#12314f; --body:#374b5e; --muted:#6a7a8b; --line:#d5dfe8;
+    --blue:#2b6fc4;  --blue-bg:#e9f1fb;  --blue-line:#cfe0f4;
+    --green:#26935f; --green-bg:#e7f6ee; --green-line:#c6e7d4;
+    --purple:#7a51c0;--purple-bg:#f1ebfa;--purple-line:#e0d3f3;
+    --orange:#d5851f;--orange-bg:#fdf4e3;--orange-line:#f2e0be;
+    --red:#d24853;  --red-bg:#fdecec;   --red-line:#f5d1d4;
+    --auto:#26935f; --auto-bg:#e3f4ea;
+    --manual:#c5811a;--manual-bg:#fbf0d9;
+    --code-bg:#0d2340; --code-ink:#e3ebf5; --code-kw:#c99bf0; --code-str:#ffcd82; --code-com:#7089a5; --code-id:#83b0ff; --code-line:#1d3a5c;
+    --radius:16px; --radius-sm:11px;
+    --sans:"Nunito","Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono","Cascadia Code",Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --page:#0a1420; --surface:#122032;
+      --ink:#e8eef6; --body:#c0ccda; --muted:#8497a8; --line:#25384f;
+      --blue-bg:#122c46;  --blue-line:#1d3f60;
+      --green-bg:#0f2c22; --green-line:#1c4536;
+      --purple-bg:#211940;--purple-line:#352a5c;
+      --orange-bg:#2c2110;--orange-line:#4a3618;
+      --red-bg:#2e1518;   --red-line:#4d2429;
+      --auto-bg:#12321f; --manual-bg:#2f2410;
+      --code-bg:#081627;
+    }
+  }
+  :root[data-theme="light"] {
+    --page:#e9eef4; --surface:#ffffff;
+    --ink:#12314f; --body:#374b5e; --muted:#6a7a8b; --line:#d5dfe8;
+    --blue-bg:#e9f1fb;--blue-line:#cfe0f4; --green-bg:#e7f6ee;--green-line:#c6e7d4;
+    --purple-bg:#f1ebfa;--purple-line:#e0d3f3; --orange-bg:#fdf4e3;--orange-line:#f2e0be;
+    --red-bg:#fdecec;--red-line:#f5d1d4; --auto-bg:#e3f4ea; --manual-bg:#fbf0d9;
+    --code-bg:#0d2340;
+  }
+  :root[data-theme="dark"] {
+    --page:#0a1420; --surface:#122032;
+    --ink:#e8eef6; --body:#c0ccda; --muted:#8497a8; --line:#25384f;
+    --blue-bg:#122c46;--blue-line:#1d3f60; --green-bg:#0f2c22;--green-line:#1c4536;
+    --purple-bg:#211940;--purple-line:#352a5c; --orange-bg:#2c2110;--orange-line:#4a3618;
+    --red-bg:#2e1518;--red-line:#4d2429; --auto-bg:#12321f; --manual-bg:#2f2410;
+    --code-bg:#081627;
+  }
+
+  * { box-sizing:border-box; }
+  body { margin:0; }
+  .poster {
+    background:var(--page); color:var(--body);
+    font-family:var(--sans); line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+    padding:clamp(10px,2.2vw,26px);
+  }
+  .sheet { max-width:1320px; margin:0 auto; display:flex; flex-direction:column; gap:18px; }
+
+  /* ---------- HEADER BAND ---------- */
+  .band {
+    background:linear-gradient(105deg,var(--navy1),var(--navy2));
+    color:#eaf1fa; border-radius:var(--radius);
+    padding:clamp(18px,2.6vw,30px) clamp(20px,3vw,38px);
+    display:grid; grid-template-columns:auto 1fr auto; gap:22px; align-items:center;
+    box-shadow:0 10px 30px rgba(9,26,48,.28);
+  }
+  .logo { width:60px; height:60px; flex:none; }
+  .band h1 {
+    margin:0; color:#fff; font-weight:800;
+    font-size:clamp(1.5rem,3.4vw,2.5rem); letter-spacing:-.02em;
+    text-wrap:balance; line-height:1.06;
+  }
+  .formula { margin:.55em 0 0; font-size:clamp(.82rem,1.35vw,1.06rem); font-weight:700; color:#b9cbe0; }
+  .formula b { font-weight:800; }
+  .formula .k1{color:#8fd0ff;} .formula .k2{color:#c7a6f2;} .formula .k3{color:#ffce7d;} .formula .eq{color:#8fe6b8;}
+  .note { font-style:italic; text-align:right; color:#cde0f2; font-size:clamp(.72rem,1.1vw,.92rem); line-height:1.5; white-space:nowrap; }
+  .note b { color:#fff; }
+  .note .ul { border-bottom:2px solid #4f86c0; padding-bottom:2px; }
+  @media (max-width:760px){
+    .band{ grid-template-columns:auto 1fr; }
+    .note{ display:none; }
+  }
+
+  /* ---------- GRID ---------- */
+  .row { display:grid; gap:18px; }
+  .row.two { grid-template-columns:1fr 1fr; }
+  .row.three { grid-template-columns:repeat(3,1fr); }
+  @media (max-width:900px){ .row.two,.row.three{ grid-template-columns:1fr; } }
+
+  /* ---------- CARD ---------- */
+  .card {
+    --sec:var(--blue); --sec-bg:var(--blue-bg); --sec-line:var(--blue-line);
+    background:var(--sec-bg); border:1px solid var(--sec-line);
+    border-radius:var(--radius); padding:clamp(15px,1.9vw,24px);
+  }
+  .card.blue   {--sec:var(--blue);  --sec-bg:var(--blue-bg);  --sec-line:var(--blue-line);}
+  .card.green  {--sec:var(--green); --sec-bg:var(--green-bg); --sec-line:var(--green-line);}
+  .card.purple {--sec:var(--purple);--sec-bg:var(--purple-bg);--sec-line:var(--purple-line);}
+  .card.orange {--sec:var(--orange);--sec-bg:var(--orange-bg);--sec-line:var(--orange-line);}
+  .card.red    {--sec:var(--red);   --sec-bg:var(--red-bg);   --sec-line:var(--red-line);}
+
+  .head { display:flex; align-items:center; gap:13px; margin-bottom:14px; }
+  .badge {
+    width:34px; height:34px; flex:none; border-radius:50%;
+    background:var(--sec); color:#fff; font-weight:800; font-size:1.05rem;
+    display:grid; place-items:center; box-shadow:0 3px 8px color-mix(in srgb,var(--sec) 45%,transparent);
+  }
+  .head h2 { margin:0; color:var(--ink); font-size:clamp(1.05rem,1.9vw,1.4rem); font-weight:800; letter-spacing:-.015em; text-wrap:balance; }
+  .lead { margin:0 0 14px; color:var(--body); font-size:.94rem; }
+  .lead strong { color:var(--ink); }
+
+  /* ---------- PIPELINE FLOW ---------- */
+  .flow-wrap { overflow-x:auto; padding-bottom:6px; }
+  .flow { display:flex; align-items:stretch; gap:0; min-width:min-content; }
+  .step {
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-sm);
+    padding:13px 14px 14px; min-width:172px; flex:1; display:flex; flex-direction:column; gap:8px;
+    position:relative;
+  }
+  .step + .step { margin-left:26px; }
+  .step + .step::before {
+    content:""; position:absolute; left:-24px; top:50%; width:22px; height:2px; background:var(--line);
+  }
+  .step + .step::after {
+    content:""; position:absolute; left:-13px; top:50%; transform:translateY(-50%);
+    border-left:7px solid var(--muted); border-top:5px solid transparent; border-bottom:5px solid transparent;
+  }
+  .step .n { font-family:var(--mono); font-size:.72rem; color:var(--muted); font-weight:700; }
+  .step .name { color:var(--ink); font-weight:800; font-size:1rem; letter-spacing:-.01em; }
+  .step code, .code, .kv code { font-family:var(--mono); }
+  .step .cmd {
+    font-family:var(--mono); font-size:.7rem; color:var(--body);
+    background:var(--page); border:1px solid var(--line); border-radius:7px;
+    padding:5px 7px; word-break:break-all; line-height:1.45;
+  }
+  .step .desc { font-size:.78rem; color:var(--muted); margin-top:auto; }
+  .pill {
+    align-self:flex-start; font-family:var(--mono); font-size:.66rem; font-weight:700;
+    padding:2px 8px; border-radius:999px; letter-spacing:.03em; text-transform:uppercase;
+  }
+  .pill.auto   { color:var(--auto);   background:var(--auto-bg);   border:1px solid color-mix(in srgb,var(--auto) 30%,transparent); }
+  .pill.manual { color:var(--manual); background:var(--manual-bg); border:1px solid color-mix(in srgb,var(--manual) 34%,transparent); }
+  .legend { display:flex; gap:16px; flex-wrap:wrap; margin-top:14px; font-size:.8rem; color:var(--muted); }
+  .legend span { display:inline-flex; align-items:center; gap:7px; }
+
+  /* ---------- CODE BLOCK ---------- */
+  .code {
+    background:var(--code-bg); border-radius:var(--radius-sm); color:var(--code-ink);
+    font-family:var(--mono); font-size:.76rem; line-height:1.7; padding:13px 15px; overflow-x:auto;
+  }
+  .code .c{color:var(--code-com);} .code .kw{color:var(--code-kw);} .code .s{color:var(--code-str);} .code .id{color:var(--code-id);}
+
+  /* ---------- KEY/VALUE + LISTS ---------- */
+  .kv { display:flex; flex-direction:column; gap:9px; }
+  .kv .item { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-sm); padding:11px 13px; }
+  .kv .item .t { color:var(--ink); font-weight:800; font-size:.9rem; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .kv .item .t code { font-size:.78rem; background:var(--page); padding:1px 6px; border-radius:5px; border:1px solid var(--line); font-weight:600; }
+  .kv .item p { margin:5px 0 0; font-size:.82rem; color:var(--body); }
+  .tag { font-family:var(--mono); font-size:.63rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; padding:2px 7px; border-radius:6px; }
+  .tag.file{color:var(--purple);background:var(--purple-bg);border:1px solid var(--purple-line);}
+  .tag.var {color:var(--blue);background:var(--blue-bg);border:1px solid var(--blue-line);}
+  .tag.b64 {color:var(--orange);background:var(--orange-bg);border:1px solid var(--orange-line);}
+
+  ul.checks { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:9px; }
+  ul.checks li { display:flex; gap:10px; align-items:flex-start; font-size:.87rem; color:var(--body); }
+  ul.checks li svg { flex:none; margin-top:1px; }
+  ul.checks li b { color:var(--ink); }
+
+  /* ---------- BRANCH DIAGRAM ---------- */
+  .branch { display:flex; flex-direction:column; gap:12px; }
+  .track { display:grid; grid-template-columns:auto auto 1fr; gap:10px; align-items:center;
+           background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-sm); padding:12px 13px; }
+  .track .br { font-family:var(--mono); font-weight:800; font-size:.9rem; padding:4px 10px; border-radius:8px; white-space:nowrap; }
+  .track.dev  .br{ color:var(--green);  background:var(--green-bg);  border:1px solid var(--green-line); }
+  .track.prod .br{ color:var(--purple); background:var(--purple-bg); border:1px solid var(--purple-line); }
+  .track .arrow { color:var(--muted); font-family:var(--mono); font-size:.8rem; white-space:nowrap; }
+  .track .state { font-family:var(--mono); font-size:.74rem; color:var(--body); line-height:1.45; }
+  .track .state b { color:var(--ink); }
+
+  /* ---------- DEPLOY JOBS ---------- */
+  .jobs { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+  @media (max-width:620px){ .jobs{ grid-template-columns:1fr; } }
+  .job { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-sm); padding:13px; display:flex; flex-direction:column; gap:7px; }
+  .job .jn { font-family:var(--mono); font-weight:800; color:var(--ink); font-size:.86rem; }
+  .job .gate { font-size:.76rem; color:var(--muted); }
+  .job .bar { height:5px; border-radius:3px; margin-top:2px; }
+  .job.dev  .bar{ background:var(--green); }  .job.dev  .jn::before{content:"● ";color:var(--green);}
+  .job.test .bar{ background:var(--orange); } .job.test .jn::before{content:"● ";color:var(--orange);}
+  .job.prod .bar{ background:var(--purple); } .job.prod .jn::before{content:"● ";color:var(--purple);}
+
+  /* ---------- ENJEUX GRID ---------- */
+  .enjeux { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px; }
+  .enj { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-sm); padding:14px 15px; border-top:4px solid var(--et,var(--blue)); }
+  .enj h3 { margin:0 0 9px; font-size:.96rem; color:var(--ink); font-weight:800; letter-spacing:-.01em; display:flex; align-items:center; gap:8px; }
+  .enj ul { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:7px; }
+  .enj li { position:relative; padding-left:15px; font-size:.82rem; color:var(--body); }
+  .enj li::before { content:""; position:absolute; left:0; top:.5em; width:6px; height:6px; border-radius:2px; background:var(--et,var(--blue)); }
+  .enj li b { color:var(--ink); }
+  .enj.state {--et:var(--blue);}
+  .enj.sec   {--et:var(--red);}
+  .enj.life  {--et:var(--green);}
+  .enj.rel   {--et:var(--orange);}
+  .enj.ops   {--et:var(--purple);}
+
+  /* ---------- CALLOUT ---------- */
+  .callout { display:flex; gap:12px; align-items:flex-start; background:var(--surface); border:1px solid var(--sec-line); border-left:4px solid var(--sec); border-radius:var(--radius-sm); padding:12px 14px; margin-top:14px; }
+  .callout p { margin:0; font-size:.84rem; color:var(--body); } .callout b{ color:var(--ink); }
+
+  /* ---------- FOOTER BAND ---------- */
+  .foot {
+    background:linear-gradient(105deg,var(--navy1),var(--navy2)); color:#dce8f4;
+    border-radius:var(--radius); padding:clamp(16px,2.2vw,24px) clamp(20px,3vw,34px);
+    display:grid; grid-template-columns:auto 1fr auto; gap:20px; align-items:center;
+  }
+  .foot .rk { width:40px; height:40px; flex:none; }
+  .foot .msg b { color:#fff; font-weight:800; font-size:clamp(.98rem,1.7vw,1.2rem); }
+  .foot .msg p { margin:5px 0 0; font-size:.86rem; color:#b9cbe0; }
+  .foot .note { border:0; }
+  @media (max-width:760px){ .foot{ grid-template-columns:auto 1fr; } .foot .note{ display:none; } }
+
+  .sec-note { font-size:.78rem; color:var(--muted); margin:12px 0 0; }
+  .sec-note code { font-family:var(--mono); background:var(--page); padding:1px 5px; border-radius:5px; border:1px solid var(--line); font-size:.9em; }
+</style>
+
+<div class="poster">
+<div class="sheet">
+
+  <!-- ===================== HEADER ===================== -->
+  <header class="band">
+    <svg class="logo" viewBox="0 0 60 60" fill="none" aria-hidden="true">
+      <rect x="6" y="8"  width="15" height="15" rx="2" fill="#8fd0ff"/>
+      <rect x="6" y="26" width="15" height="15" rx="2" fill="#c7a6f2"/>
+      <rect x="6" y="44" width="15" height="12" rx="2" fill="#8fe6b8"/>
+      <path d="M23 15h14a6 6 0 0 1 6 6v3" stroke="#6f9fd0" stroke-width="2.4" fill="none"/>
+      <path d="M23 33h20" stroke="#6f9fd0" stroke-width="2.4"/>
+      <circle cx="47" cy="24" r="5" fill="#ffce7d"/>
+      <path d="M43 50l4-4 4 4" stroke="#8fe6b8" stroke-width="2.4" fill="none"/>
+    </svg>
+    <div>
+      <h1>Pipeline CI/CD × Terraform : des environnements à la demande</h1>
+      <p class="formula">
+        <span class="k1">Secrets gérés hors du repo</span> <b>+</b>
+        <span class="k2">un pipeline par branche</span> <b>+</b>
+        <span class="k3">apply / destroy manuels</span>
+        <b class="eq">=</b> <span class="eq"><b>des environnements jetables et isolés</b></span>
+      </p>
+    </div>
+    <div class="note">
+      <b>Une branche.</b><br>Un environnement.<br><span class="ul">Zéro clé dans le repo.</span>
+    </div>
+  </header>
+
+  <!-- ===================== 1 · PIPELINE TYPE ===================== -->
+  <section class="card blue">
+    <div class="head"><div class="badge">1</div><h2>Le pipeline type : de l'init au destroy</h2></div>
+    <p class="lead">Un même pipeline enchaîne des étapes <strong>automatiques</strong> (relecture, sans risque) puis des étapes <strong>manuelles</strong> (elles créent ou détruisent du réel — on met un humain dans la boucle).</p>
+    <div class="flow-wrap">
+      <div class="flow">
+        <div class="step">
+          <div class="n">stage · setup</div><div class="name">init</div>
+          <span class="pill auto">auto</span>
+          <div class="cmd">terraform init -backend-config="key=ec2/$TF_ENV/…"</div>
+          <div class="desc">Configure le backend distant — un state par env.</div>
+        </div>
+        <div class="step">
+          <div class="n">stage · validate</div><div class="name">validate</div>
+          <span class="pill auto">auto</span>
+          <div class="cmd">terraform fmt -check<br>terraform validate</div>
+          <div class="desc">Lint + « compilation à blanc ». Aucun appel cloud.</div>
+        </div>
+        <div class="step">
+          <div class="n">stage · plan</div><div class="name">plan</div>
+          <span class="pill auto">auto</span>
+          <div class="cmd">terraform plan -var-file=$TF_ENV.tfvars</div>
+          <div class="desc">Pour <b>relecture</b> : ce qui va changer, rien n'est appliqué.</div>
+        </div>
+        <div class="step">
+          <div class="n">stage · deploy</div><div class="name">apply</div>
+          <span class="pill manual">manuel</span>
+          <div class="cmd">terraform apply -auto-approve …</div>
+          <div class="desc">Provisionne l'infra réelle. Gate humain (bouton ▶).</div>
+        </div>
+        <div class="step">
+          <div class="n">stage · connect</div><div class="name">connect / config</div>
+          <span class="pill manual">manuel</span>
+          <div class="cmd">ssh -i key.pem ec2-user@$IP</div>
+          <div class="desc">Vérifie l'accès, configure / provisionne le serveur.</div>
+        </div>
+        <div class="step">
+          <div class="n">stage · cleanup</div><div class="name">destroy</div>
+          <span class="pill manual">manuel</span>
+          <div class="cmd">terraform destroy -auto-approve …</div>
+          <div class="desc">Nettoie tout. L'environnement passe <b>stopped</b>.</div>
+        </div>
+      </div>
+    </div>
+    <div class="legend">
+      <span><span class="pill auto">auto</span> lancé à chaque push — sûr, ne modifie rien de réel</span>
+      <span><span class="pill manual">manuel</span> attend un clic — crée, modifie ou détruit des ressources</span>
+    </div>
+  </section>
+
+  <!-- ===================== 2 & 3 ===================== -->
+  <div class="row two">
+
+    <!-- 2 · SECRETS -->
+    <section class="card purple">
+      <div class="head"><div class="badge">2</div><h2>Secrets, variables &amp; clés SSH</h2></div>
+      <p class="lead">Jamais dans le repo. Ils vivent dans le <strong>moteur de pipeline</strong> (variables CI/CD chiffrées) ou dans un <strong>coffre</strong> (Vault). Le job les reçoit en variables d'environnement.</p>
+      <div class="kv">
+        <div class="item">
+          <div class="t"><span class="tag var">Variable</span> Credentials AWS <code>AWS_ACCESS_KEY_ID</code> / <code>SECRET</code></div>
+          <p>Masquées + protégées. Le provider <b>et</b> le backend S3 les lisent tout seuls via l'environnement — aucun <code>access_key</code> dans le code.</p>
+        </div>
+        <div class="item">
+          <div class="t"><span class="tag var">Variable</span> <code>SSH_PUBLIC_KEY</code></div>
+          <p>Injectée en <code>TF_VAR_ssh_public_key</code> → Terraform crée la <code>aws_key_pair</code>. Rien à pré-créer dans la console.</p>
+        </div>
+        <div class="item">
+          <div class="t"><span class="tag file">File</span><span class="tag b64">base64</span> <code>SSH_PRIVATE_KEY</code></div>
+          <p><b>« Masked » refuse le multi-lignes</b> → on stocke la clé <b>encodée base64</b> (une ligne). Type <b>File</b> = la variable contient un <b>chemin</b>. Le job décode : <code>base64 -d "$SSH_PRIVATE_KEY" &gt; key.pem</code> puis <code>chmod 600</code>.</p>
+        </div>
+      </div>
+      <div class="callout" style="--sec:var(--purple);--sec-line:var(--purple-line);">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 21l-5.2 2.8 1-5.8L3.6 8.1l5.8-.8z" fill="#e2a94a" opacity=".18"/><path d="M12 8v5m0 3h.01" stroke="#d5851f" stroke-width="2" stroke-linecap="round"/></svg>
+        <p><b>Pipeline vs Vault.</b> Pour un lab : variables du moteur CI, simple. En entreprise : <b>OIDC</b> (GitLab s'authentifie à AWS sans secret long terme) ou <b>Vault</b> (secrets à durée de vie courte, audités, révocables).</p>
+      </div>
+    </section>
+
+    <!-- 3 · ENV PAR BRANCHE -->
+    <section class="card green">
+      <div class="head"><div class="badge">3</div><h2>Un environnement par branche</h2></div>
+      <p class="lead">GitLab exécute déjà un pipeline par branche. On déduit l'environnement de <strong><code>$CI_COMMIT_REF_NAME</code></strong> — <strong>même code</strong>, seuls le <code>var-file</code> et la <b>clé de state</b> changent.</p>
+      <div class="branch">
+        <div class="track dev">
+          <span class="br">dev</span><span class="arrow">→ TF_ENV=dev →</span>
+          <span class="state">state <b>ec2/dev/terraform.tfstate</b><br>EC2 dev · <code>t3.micro</code></span>
+        </div>
+        <div class="track prod">
+          <span class="br">main</span><span class="arrow">→ TF_ENV=prod →</span>
+          <span class="state">state <b>ec2/prod/terraform.tfstate</b><br>EC2 prod · <code>t3.small</code></span>
+        </div>
+      </div>
+      <div class="code" aria-label="workflow rules">
+<span class="kw">workflow</span>:<br>
+&nbsp;&nbsp;<span class="kw">rules</span>:<br>
+&nbsp;&nbsp;- <span class="kw">if</span>: <span class="s">'$CI_COMMIT_REF_NAME == "main"'</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">variables</span>: { <span class="id">TF_ENV</span>: <span class="s">"prod"</span> }<br>
+&nbsp;&nbsp;- <span class="kw">if</span>: <span class="s">'$CI_COMMIT_REF_NAME == "dev"'</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">variables</span>: { <span class="id">TF_ENV</span>: <span class="s">"dev"</span> }
+      </div>
+      <div class="callout" style="--sec:var(--green);--sec-line:var(--green-line);">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#2a9d6a" opacity=".16"/><path d="M7.5 12.5l3 3 6-6.5" stroke="#26935f" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <p><b>Une clé de state par env → pas de destruction croisée.</b> Le bucket est partagé, la clé ne l'est pas : un <code>apply</code> sur dev ne peut pas écraser prod.</p>
+      </div>
+    </section>
+  </div>
+
+  <!-- ===================== 4 · DEPLOY STAGE MULTI-JOBS ===================== -->
+  <section class="card orange">
+    <div class="head"><div class="badge">4</div><h2>Variante : un stage <code style="font-size:.85em">deploy</code>, plusieurs jobs cibles</h2></div>
+    <p class="lead">Autre modèle : au lieu d'« une branche = un env », on garde <strong>un pipeline</strong> avec un stage <strong>deploy</strong> qui contient un job par cible. On <strong>promeut</strong> le même code de dev → test → prod, chaque cran plus verrouillé.</p>
+    <div class="jobs">
+      <div class="job dev"><div class="jn">deploy-to-dev</div><div class="gate">Automatique sur chaque push. Bac à sable, feedback rapide.</div><div class="bar"></div></div>
+      <div class="job test"><div class="jn">deploy-to-test</div><div class="gate">Manuel. Recette / intégration avant de promouvoir.</div><div class="bar"></div></div>
+      <div class="job prod"><div class="jn">deploy-to-prod</div><div class="gate">Manuel + <b>uniquement sur la branche prod</b>, avec approbation.</div><div class="bar"></div></div>
+    </div>
+    <p class="sec-note">Chaque job pointe le même code sur un <code>-var-file</code> et une clé de state différents. La cible <code>prod</code> est protégée par un <code>rules:</code> de branche + <code>when: manual</code> (et idéalement un <b>environnement protégé</b> à approbateurs).</p>
+    <div class="callout" style="--sec:var(--orange);--sec-line:var(--orange-line);">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#d5851f" opacity=".16"/><path d="M12 8v5m0 3h.01" stroke="#d5851f" stroke-width="2" stroke-linecap="round"/></svg>
+      <p><b>Branche = env</b> (isolation forte, un pipeline par env) <b>vs stage deploy multi-jobs</b> (promotion visible dev→test→prod dans un seul pipeline). Les deux coexistent ; on choisit selon le besoin d'isolation et de traçabilité de la promotion.</p>
+    </div>
+  </section>
+
+  <!-- ===================== 5 · QUOI D'AUTRE ===================== -->
+  <section class="card blue" style="--sec-bg:var(--surface);">
+    <div class="head"><div class="badge">5</div><h2>Quoi d'autre ? Les enjeux à ne pas oublier</h2></div>
+    <div class="enjeux">
+      <div class="enj state">
+        <h3>State &amp; concurrence</h3>
+        <ul>
+          <li><b>Backend distant</b> partagé, pas de state local qui traîne</li>
+          <li><b>Verrou</b> du state (<code>use_lockfile</code> S3 ou DynamoDB) — pas deux apply en même temps</li>
+          <li><b>resource_group</b> sur apply/destroy : sérialise un même env</li>
+          <li>Une <b>clé de state par env</b> → jamais de destruction croisée</li>
+        </ul>
+      </div>
+      <div class="enj sec">
+        <h3>Sécurité</h3>
+        <ul>
+          <li><b>Moindre privilège</b> : les creds CI n'ont que ce qu'il faut</li>
+          <li><b>OIDC &gt; clés statiques</b> ; secrets en coffre (Vault)</li>
+          <li>Secrets <b>jamais</b> dans le repo ni dans les logs</li>
+          <li><b>SG <code>0.0.0.0/0</code></b> = OK lab, à <b>restreindre</b> en prod</li>
+        </ul>
+      </div>
+      <div class="enj life">
+        <h3>Cycle de vie &amp; coût</h3>
+        <ul>
+          <li><b>apply / destroy manuels</b> : rien ne part tout seul</li>
+          <li><b>auto_stop / TTL</b> : l'env éphémère se nettoie</li>
+          <li>Traquer les <b>ressources orphelines</b> (fuites de coût)</li>
+          <li>On ne paie que ce qu'on utilise</li>
+        </ul>
+      </div>
+      <div class="enj rel">
+        <h3>Fiabilité</h3>
+        <ul>
+          <li><b>plan = relecture</b> obligatoire avant apply</li>
+          <li><b>Drift</b> : détecter les modifs faites à la main</li>
+          <li><b>Idempotence</b> : rejouer donne le même résultat</li>
+          <li><b>Rollback</b> = ré-appliquer une version ; versions TF/provider <b>épinglées</b></li>
+        </ul>
+      </div>
+      <div class="enj ops">
+        <h3>Exploitation</h3>
+        <ul>
+          <li><b>Outputs exposés</b> (IP, URL) → <code>environment.url</code> cliquable</li>
+          <li><b>Approbations</b> / environnements protégés sur prod</li>
+          <li><b>Logs &amp; traces</b> des jobs pour l'audit</li>
+          <li><b>Données</b> persistantes ≠ éphémère → sauvegardes</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== FOOTER ===================== -->
+  <footer class="foot">
+    <svg class="rk" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+      <path d="M20 4c6 3 9 9 9 16l-4 4h-10l-4-4c0-7 3-13 9-16z" fill="#c7a6f2" opacity=".9"/>
+      <circle cx="20" cy="16" r="3.4" fill="#0b2440"/>
+      <path d="M13 26l-3 6 6-2m11-4l3 6-6-2" stroke="#ffce7d" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+    <div class="msg">
+      <b>Le pipeline construit. Terraform décrit. Les secrets restent dehors.</b>
+      <p>Automatique pour relire (fmt / validate / plan), manuel pour agir (apply / connect / destroy) — un environnement par branche, un state isolé par environnement.</p>
+    </div>
+    <div class="note"><b>Jetable.</b><br>Reproductible.<br><span class="ul">Sans fuite de ressources.</span></div>
+  </footer>
+
+</div>
+</div>
