@@ -300,6 +300,11 @@ D'abord, générez une **paire de clés SSH dédiée au lab** (ne réutilisez pa
 ```bash
 ssh-keygen -t ed25519 -f ./aelion-2609 -N ""
 # crée aelion-2609 (privée) et aelion-2609.pub (publique)
+
+# La clé privée sera stockée dans GitLab ENCODÉE en base64 (voir la note ci-dessous).
+# On génère donc sa version base64, sur une seule ligne :
+base64 -i ./aelion-2609 -o ./aelion-2609.b64       # macOS
+# base64 -w0 ./aelion-2609 > ./aelion-2609.b64      # Linux (GNU coreutils)
 ```
 
 Puis créez ces **cinq variables** (Settings → CI/CD → Variables → *Add variable*) :
@@ -310,14 +315,19 @@ Puis créez ces **cinq variables** (Settings → CI/CD → Variables → *Add va
 | `AWS_SECRET_ACCESS_KEY` | Variable | votre secret key | ✅ Masked, ✅ Protected |
 | `AWS_DEFAULT_REGION` | Variable | `eu-west-3` | ✅ Protected |
 | `SSH_PUBLIC_KEY` | Variable | contenu de `aelion-2609.pub` | ✅ Protected |
-| `SSH_PRIVATE_KEY` | **File** | contenu de `aelion-2609` (la privée) | ✅ Protected |
+| `SSH_PRIVATE_KEY` | **File** | contenu de `aelion-2609.b64` (la privée **encodée base64**) | ✅ Masked, ✅ Protected |
 
-> 💡 **Deux détails qui piègent tout le monde :**
+> 💡 **Trois détails qui piègent tout le monde :**
 > - **`SSH_PRIVATE_KEY` est de type `File`** : GitLab écrit sa valeur dans un fichier temporaire
->   et met le **chemin** de ce fichier dans la variable. Dans le job, on fait donc
->   `ssh -i "$SSH_PRIVATE_KEY" ...` (le chemin), pas la clé elle-même.
-> - **`Masked` refuse les valeurs multi-lignes** : c'est pour ça que la clé privée est en type
->   `File` (non masquable) et pas en `Variable` masquée.
+>   et met le **chemin** de ce fichier dans la variable. Dans le job, on manipule donc
+>   `"$SSH_PRIVATE_KEY"` comme un **chemin**, pas comme la clé elle-même.
+> - **On stocke la clé encodée en base64** : une clé privée multi-lignes est fragile à
+>   copier-coller dans l'UI (retours-à-la-ligne mangés, espaces en trop). Encodée en base64 sur
+>   **une seule ligne**, elle traverse l'UI sans dommage — et devient même **`Masked`-able**. Le
+>   pipeline la **décodera** au moment de s'en servir : `base64 -d "$SSH_PRIVATE_KEY" > key.pem`.
+> - **`Masked` refuse les valeurs multi-lignes** : c'est l'autre raison du base64 — la version
+>   encodée (une seule ligne, sans caractère interdit) peut être masquée, contrairement à la clé
+>   brute.
 
 **Un mot sur `Protected`.** Une variable *protected* n'est exposée qu'aux pipelines des
 **branches/tags protégés**. Comme on veut que `dev` fonctionne aussi, **protégez les deux
@@ -433,8 +443,9 @@ ssh:
     - terraform init -backend-config="key=ec2/${TF_ENV}/terraform.tfstate"
   script:
     - IP=$(terraform output -raw public_ip)
-    # SSH_PRIVATE_KEY (type File) = un CHEMIN. On recopie pour poser chmod 600.
-    - cp "$SSH_PRIVATE_KEY" key.pem
+    # SSH_PRIVATE_KEY (type File) = un CHEMIN vers un fichier contenant la clé
+    # encodée en base64. On la DÉCODE vers key.pem, puis on pose chmod 600.
+    - base64 -d "$SSH_PRIVATE_KEY" > key.pem
     - chmod 600 key.pem
     # TODO : ssh -i key.pem -o StrictHostKeyChecking=no ec2-user@"$IP" "hostname; uptime"
 ```
@@ -523,6 +534,15 @@ ssh -i ./aelion-2609 ec2-user@<public_ip>   # <- IP affichée par le job apply
 > - *Symptôme :* SSH refuse la clé privée.
 > - *Cause :* la clé recopiée n'a pas les bons droits.
 > - *Correctif :* `chmod 600 key.pem` **avant** le `ssh` (déjà dans le squelette).
+
+> **Piège — `Load key "key.pem": invalid format` / `error in libcrypto` dans le job `ssh`.**
+> - *Symptôme :* la clé décodée est illisible, SSH refuse de la charger.
+> - *Cause :* la variable `SSH_PRIVATE_KEY` contient la clé **brute** (pas encodée), ou le job
+>   fait `cp` au lieu de `base64 -d`. Le décodage produit alors du binaire, pas la clé.
+> - *Correctif :* stockez bien le contenu de `aelion-2609.b64` (encodé, une seule ligne) et
+>   décodez dans le job : `base64 -d "$SSH_PRIVATE_KEY" > key.pem`. À l'inverse, si vous stockez
+>   la clé brute, utilisez `cp "$SSH_PRIVATE_KEY" key.pem` — mais l'encodage base64 est plus
+>   robuste dans l'UI GitLab.
 
 > **Piège — `terraform fmt -check` fait échouer le pipeline.**
 > - *Symptôme :* job `fmt-validate` en rouge, diff de formatage.

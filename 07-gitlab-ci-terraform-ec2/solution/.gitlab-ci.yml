@@ -87,9 +87,11 @@ ssh:
     - IP=$(terraform output -raw public_ip)
     - echo "Connexion SSH a $IP ..."
     # SSH_PRIVATE_KEY est une variable de type "File" -> sa valeur est un CHEMIN
-    # vers un fichier temporaire contenant la cle. On la recopie pour poser les
-    # bonnes permissions (ssh refuse une cle en 0644).
-    - cp "$SSH_PRIVATE_KEY" key.pem
+    # vers un fichier temporaire. Ce fichier contient la cle privee encodee en
+    # base64 (l'encodage evite les soucis de retours-a-la-ligne dans l'UI GitLab).
+    # On la DECODE vers key.pem, puis on pose les bonnes permissions (ssh refuse
+    # une cle en 0644).
+    - base64 -d "$SSH_PRIVATE_KEY" > key.pem
     - chmod 600 key.pem
     - >
       ssh -i key.pem -o StrictHostKeyChecking=no -o ConnectTimeout=15
