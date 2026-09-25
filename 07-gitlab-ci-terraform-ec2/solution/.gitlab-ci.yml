@@ -6,35 +6,29 @@
 
 stages: [validate, plan, deploy, connect, cleanup]
 
+# ---------------------------------------------------------------------------
+# UNE seule source de verite pour "branche -> environnement".
+# workflow.rules s'evalue UNE fois par pipeline et fait deux choses :
+#   1. il limite le pipeline aux branches dev et main (toute autre branche ne
+#      declenche AUCUN pipeline) ;
+#   2. il definit TF_ENV au niveau PIPELINE -> la variable est visible par TOUS
+#      les jobs ET par le mot-cle `environment:` (qui est evalue avant le script).
+# Resultat : les jobs ne redefinissent plus rien. Les jobs "auto" n'ont aucune
+# regle ; les jobs "manuels" ajoutent seulement `when: manual`.
+# ---------------------------------------------------------------------------
+workflow:
+  rules:
+    - if: '$CI_COMMIT_REF_NAME == "main"'
+      variables:
+        TF_ENV: "prod"
+    - if: '$CI_COMMIT_REF_NAME == "dev"'
+      variables:
+        TF_ENV: "dev"
+
 default:
   image:
     name: hashicorp/terraform:1.13
     entrypoint: [""]
-
-# ---------------------------------------------------------------------------
-# Regles reutilisables : elles font DEUX choses a la fois
-#   1. ne lancer le pipeline QUE sur les branches dev et main ;
-#   2. definir la variable TF_ENV (dev/prod) au niveau du pipeline, pour qu'elle
-#      soit utilisable AUSSI dans le mot-cle `environment:` (qui est evalue
-#      AVANT le script -> une variable de before_script n'y serait pas visible).
-# ---------------------------------------------------------------------------
-.rules-auto: &rules-auto
-  - if: '$CI_COMMIT_REF_NAME == "main"'
-    variables:
-      TF_ENV: "prod"
-  - if: '$CI_COMMIT_REF_NAME == "dev"'
-    variables:
-      TF_ENV: "dev"
-
-.rules-manual: &rules-manual
-  - if: '$CI_COMMIT_REF_NAME == "main"'
-    when: manual
-    variables:
-      TF_ENV: "prod"
-  - if: '$CI_COMMIT_REF_NAME == "dev"'
-    when: manual
-    variables:
-      TF_ENV: "dev"
 
 # Base commune (DRY) : on entre dans ops/terraform, on passe la cle publique SSH
 # au provider en var Terraform, et on init le backend S3 avec une CLE par env.
@@ -47,7 +41,6 @@ default:
 fmt-validate:
   extends: .terraform
   stage: validate
-  rules: *rules-auto
   script:
     - terraform fmt -check -recursive
     - terraform validate
@@ -55,14 +48,13 @@ fmt-validate:
 plan:
   extends: .terraform
   stage: plan
-  rules: *rules-auto
   script:
     - terraform plan -var-file="environments/${TF_ENV}.tfvars"
 
 apply:
   extends: .terraform
   stage: deploy
-  rules: *rules-manual
+  when: manual
   environment:
     name: $TF_ENV
     url: $DEPLOY_URL # valeur fournie par le dotenv ci-dessous (deja prefixee http://)
@@ -77,7 +69,7 @@ apply:
 
 ssh:
   stage: connect
-  rules: *rules-manual
+  when: manual
   # Ce job a besoin de terraform (pour lire l'IP dans le state) ET d'un client SSH.
   before_script:
     - cd ops/terraform
@@ -101,7 +93,7 @@ ssh:
 destroy:
   extends: .terraform
   stage: cleanup
-  rules: *rules-manual
+  when: manual
   environment:
     name: $TF_ENV
     action: stop
