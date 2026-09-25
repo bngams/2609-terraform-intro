@@ -1,0 +1,7 @@
+# Terraform — artefacts locaux, jamais commités
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.*
+terraform.tfstate.d/
+output/

@@ -11,7 +11,7 @@
 module "images" {
   source = "./modules/images"
   images = {
-    wordpress = "wordpress:latest"
+    wordpress = "wordpress:latest" # var.GLOBAL_CONFIG["WP_IMAGE"]
     mariadb   = "mariadb:10.6.4-focal"
   }
 }
