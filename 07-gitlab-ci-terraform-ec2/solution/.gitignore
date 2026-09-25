@@ -1,0 +1,12 @@
+# Jamais dans Git : secrets, cles, credentials, state local
+*.pem
+*.key
+*.tfvars.secret
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+
+# Les secrets vivent dans GitLab (Settings > CI/CD > Variables), pas dans le repo.
+.env
+deploy.env

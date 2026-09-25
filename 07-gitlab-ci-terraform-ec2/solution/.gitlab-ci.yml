@@ -1,0 +1,107 @@
+# Pipeline GitLab : Terraform provisionne un EC2, un environnement par branche.
+#   branche dev  -> environnement dev  (state ec2/dev/terraform.tfstate)
+#   branche main -> environnement prod (state ec2/prod/terraform.tfstate)
+#
+# apply et destroy sont MANUELS (bouton dans l'UI). fmt/validate/plan sont auto.
+
+stages: [validate, plan, deploy, connect, cleanup]
+
+default:
+  image:
+    name: hashicorp/terraform:1.13
+    entrypoint: [""]
+
+# ---------------------------------------------------------------------------
+# Regles reutilisables : elles font DEUX choses a la fois
+#   1. ne lancer le pipeline QUE sur les branches dev et main ;
+#   2. definir la variable TF_ENV (dev/prod) au niveau du pipeline, pour qu'elle
+#      soit utilisable AUSSI dans le mot-cle `environment:` (qui est evalue
+#      AVANT le script -> une variable de before_script n'y serait pas visible).
+# ---------------------------------------------------------------------------
+.rules-auto: &rules-auto
+  - if: '$CI_COMMIT_REF_NAME == "main"'
+    variables:
+      TF_ENV: "prod"
+  - if: '$CI_COMMIT_REF_NAME == "dev"'
+    variables:
+      TF_ENV: "dev"
+
+.rules-manual: &rules-manual
+  - if: '$CI_COMMIT_REF_NAME == "main"'
+    when: manual
+    variables:
+      TF_ENV: "prod"
+  - if: '$CI_COMMIT_REF_NAME == "dev"'
+    when: manual
+    variables:
+      TF_ENV: "dev"
+
+# Base commune (DRY) : on entre dans ops/terraform, on passe la cle publique SSH
+# au provider en var Terraform, et on init le backend S3 avec une CLE par env.
+.terraform:
+  before_script:
+    - cd ops/terraform
+    - export TF_VAR_ssh_public_key="$SSH_PUBLIC_KEY"
+    - terraform init -backend-config="key=ec2/${TF_ENV}/terraform.tfstate"
+
+fmt-validate:
+  extends: .terraform
+  stage: validate
+  rules: *rules-auto
+  script:
+    - terraform fmt -check -recursive
+    - terraform validate
+
+plan:
+  extends: .terraform
+  stage: plan
+  rules: *rules-auto
+  script:
+    - terraform plan -var-file="environments/${TF_ENV}.tfvars"
+
+apply:
+  extends: .terraform
+  stage: deploy
+  rules: *rules-manual
+  environment:
+    name: $TF_ENV
+    url: $DEPLOY_URL # valeur fournie par le dotenv ci-dessous (deja prefixee http://)
+  script:
+    - terraform apply -auto-approve -var-file="environments/${TF_ENV}.tfvars"
+    - terraform output -raw public_ip
+    # Expose l'URL a GitLab (bouton "View deployment" sur l'environnement)
+    - echo "DEPLOY_URL=$(terraform output -raw web_url)" > deploy.env
+  artifacts:
+    reports:
+      dotenv: ops/terraform/deploy.env
+
+ssh:
+  stage: connect
+  rules: *rules-manual
+  # Ce job a besoin de terraform (pour lire l'IP dans le state) ET d'un client SSH.
+  before_script:
+    - cd ops/terraform
+    - apk add --no-cache openssh-client
+    - terraform init -backend-config="key=ec2/${TF_ENV}/terraform.tfstate"
+  script:
+    - IP=$(terraform output -raw public_ip)
+    - echo "Connexion SSH a $IP ..."
+    # SSH_PRIVATE_KEY est une variable de type "File" -> sa valeur est un CHEMIN
+    # vers un fichier temporaire contenant la cle. On la recopie pour poser les
+    # bonnes permissions (ssh refuse une cle en 0644).
+    - cp "$SSH_PRIVATE_KEY" key.pem
+    - chmod 600 key.pem
+    - >
+      ssh -i key.pem -o StrictHostKeyChecking=no -o ConnectTimeout=15
+      ec2-user@"$IP"
+      "echo '--- Connecte a la VM ---'; hostname; uptime; curl -s localhost | head -n1"
+
+destroy:
+  extends: .terraform
+  stage: cleanup
+  rules: *rules-manual
+  environment:
+    name: $TF_ENV
+    action: stop
+  script:
+    - terraform destroy -auto-approve -var-file="environments/${TF_ENV}.tfvars"
