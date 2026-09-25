@@ -1,0 +1,8 @@
+# Terragrunt / Terraform — artefacts locaux, jamais commités
+.terragrunt-cache/
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+state/
+backend.tf
